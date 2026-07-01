@@ -64,23 +64,41 @@
     </div>
 
     <div class="card mt-4 p-4">
-        <div class="row align-items-center mb-4 g-3">
-            <div class="col-md-3">
+        <div class="row align-items-end mb-4 g-3">
+            <div class="col-xl-3 col-lg-12">
                 <h3 class="card-title m-0 h5 fw-bold">Consultar Lançamentos</h3>
             </div>
-            <div class="col-md-4">
+            
+            <div class="col-xl-3 col-md-4">
+                <label class="form-label small text-muted mb-1">Buscar por Descrição</label>
+                <input type="text" id="busca-descricao" class="form-control" placeholder="Ex: Luz, Gas..." oninput="aplicarFiltrosGlobal()">
+            </div>
+
+            <div class="col-xl-4 col-md-5">
+                <label class="form-label small text-muted mb-1">Período de Meses</label>
                 <div class="input-group">
-                    <input type="text" id="busca-descricao" class="form-control" placeholder="Buscar por descrição...">
-                    <button class="btn btn-primary" type="button" onclick="aplicarBusca()">Buscar</button>
-                    <button class="btn btn-outline-secondary" type="button" onclick="limparBusca()">Limpar</button>
+                    <span class="input-group-text bg-transparent text-muted small">De</span>
+                    <input type="month" id="filtro-data-inicio" class="form-control" onchange="aplicarFiltrosGlobal()">
+                    <span class="input-group-text bg-transparent text-muted small">Até</span>
+                    <input type="month" id="filtro-data-fim" class="form-control" onchange="aplicarFiltrosGlobal()">
                 </div>
             </div>
-            <div class="col-md-5 text-md-end">
+
+            <div class="col-xl-2 col-md-3">
+                <div class="d-flex gap-2 w-100">
+                    <button class="btn btn-primary flex-grow-1" type="button" onclick="aplicarFiltrosGlobal()">Filtrar</button>
+                    <button class="btn btn-outline-secondary" type="button" onclick="limparFiltrosGlobal()" title="Limpar Filtros">Limpar</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-12 text-md-end">
                 <div class="d-flex gap-2 justify-content-md-end flex-wrap">
-                    <button class="btn btn-outline-secondary active" id="btn-todos" onclick="filtrar('todos')">Todos</button>
-                    <button class="btn btn-outline-success" id="btn-entradas" onclick="filtrar('entrada')">Entradas</button>
-                    <button class="btn btn-outline-danger" id="btn-saidas" onclick="filtrar('saida')">Saídas</button>
-                    <button class="btn btn-outline-info text-dark" id="btn-cofrinho" onclick="filtrar('cofrinho')">Cofrinho</button>
+                    <button class="btn btn-outline-secondary active" id="btn-todos" onclick="filtrarTipo('todos')">Todos</button>
+                    <button class="btn btn-outline-success" id="btn-entradas" onclick="filtrarTipo('entrada')">Entradas</button>
+                    <button class="btn btn-outline-danger" id="btn-saidas" onclick="filtrarTipo('saida')">Saídas</button>
+                    <button class="btn btn-outline-info text-dark" id="btn-cofrinho" onclick="filtrarTipo('cofrinho')">Cofrinho</button>
                 </div>
             </div>
         </div>
@@ -108,14 +126,12 @@
     let lancamentos = JSON.parse(localStorage.getItem('lancamentos')) || [];
     let filtroAtual = 'todos';
     let termoBusca = '';
+    let dataInicioFiltro = '';
+    let dataFimFiltro = '';
     let meuGrafico = null;
 
-    // Define o mês atual como padrão no input
+    // Define o mês atual como padrão no input de cadastro
     document.getElementById('mes').value = new Date().toISOString().substring(0, 7);
-
-    document.getElementById('busca-descricao').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') aplicarBusca();
-    });
 
     document.getElementById('finance-form').addEventListener('submit', function(e) {
         e.preventDefault();
@@ -129,11 +145,9 @@
         };
 
         if (idEdicao) {
-            // Modo Edição: Atualiza o item existente
             lancamentos = lancamentos.map(l => l.id === parseInt(idEdicao) ? { ...l, ...dadosForm } : l);
-            cancelarEdicao(); // Reseta o estado do formulário
+            cancelarEdicao();
         } else {
-            // Modo Criação: Adiciona um novo item
             const novoLancamento = {
                 id: Date.now(),
                 ...dadosForm
@@ -152,7 +166,6 @@
     }
 
     function deletar(id) {
-        // Se o item que está sendo editado for deletado, cancela a edição
         if (document.getElementById('edit-id').value == id) cancelarEdicao();
         
         lancamentos = lancamentos.filter(l => l.id !== id);
@@ -164,14 +177,12 @@
         const item = lancamentos.find(l => l.id === id);
         if (!item) return;
 
-        // Preenche o formulário
         document.getElementById('edit-id').value = item.id;
         document.getElementById('tipo').value = item.tipo;
         document.getElementById('descricao').value = item.descricao;
         document.getElementById('valor').value = item.valor;
         document.getElementById('mes').value = item.mes;
 
-        // Altera a interface para o modo de edição
         document.getElementById('form-title').innerText = "Editar Lançamento";
         document.getElementById('btn-submit').innerText = "Salvar Alterações";
         document.getElementById('btn-submit').classList.replace('btn-primary', 'btn-warning');
@@ -185,7 +196,6 @@
         document.getElementById('finance-form').reset();
         document.getElementById('mes').value = new Date().toISOString().substring(0, 7);
 
-        // Volta a interface para o modo de criação
         document.getElementById('form-title').innerText = "Novo Lançamento";
         document.getElementById('btn-submit').innerText = "Cadastrar";
         document.getElementById('btn-submit').classList.replace('btn-warning', 'btn-primary');
@@ -198,23 +208,19 @@
             return;
         }
 
-        // Cabeçalho do CSV com BOM para o Excel ler corretamente os acentos em português
         let csvContent = "\uFEFFMês;Descrição;Tipo;Valor (R$)\n";
-
-        // Ordena os dados por mês para o relatório ficar bonito
         const dadosOrdenados = [...lancamentos].sort((a, b) => a.mes.localeCompare(b.mes));
 
         dadosOrdenados.forEach(l => {
             const linha = [
                 formatarMes(l.mes),
-                l.descricao.replace(/;/g, ','), // Evita quebrar as colunas se houver ponto e vírgula na descrição
+                l.descricao.replace(/;/g, ','),
                 l.tipo.toUpperCase(),
-                l.valor.toFixed(2).replace('.', ',') // Formato de moeda brasileiro para o Excel
+                l.valor.toFixed(2).replace('.', ',')
             ];
             csvContent += linha.join(';') + '\n';
         });
 
-        // Cria o download do arquivo
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
@@ -225,7 +231,7 @@
         document.body.removeChild(link);
     }
 
-    function filtrar(tipo) {
+    function filtrarTipo(tipo) {
         filtroAtual = tipo;
         document.getElementById('btn-todos').classList.toggle('active', tipo === 'todos');
         document.getElementById('btn-entradas').classList.toggle('active', tipo === 'entrada');
@@ -234,14 +240,20 @@
         atualizarTela();
     }
 
-    function aplicarBusca() {
+    function aplicarFiltrosGlobal() {
         termoBusca = document.getElementById('busca-descricao').value.toLowerCase().trim();
+        dataInicioFiltro = document.getElementById('filtro-data-inicio').value;
+        dataFimFiltro = document.getElementById('filtro-data-fim').value;
         atualizarTela();
     }
 
-    function limparBusca() {
+    function limparFiltrosGlobal() {
         document.getElementById('busca-descricao').value = '';
+        document.getElementById('filtro-data-inicio').value = '';
+        document.getElementById('filtro-data-fim').value = '';
         termoBusca = '';
+        dataInicioFiltro = '';
+        dataFimFiltro = '';
         atualizarTela();
     }
 
@@ -254,7 +266,11 @@
         return lancamentos.filter(l => {
             const passaTipo = (filtroAtual === 'todos' || l.tipo === filtroAtual);
             const passaDescricao = l.descricao.toLowerCase().includes(termoBusca);
-            return passaTipo && passaDescricao;
+            
+            const passaDataInicio = !dataInicioFiltro || l.mes >= dataInicioFiltro;
+            const passaDataFim = !dataFimFiltro || l.mes <= dataFimFiltro;
+
+            return passaTipo && passaDescricao && passaDataInicio && passaDataFim;
         });
     }
 
@@ -270,14 +286,19 @@
         let totalCofrinho = 0;
 
         lancamentos.forEach(l => {
-            if (l.descricao.toLowerCase().includes(termoBusca)) {
+            const passaDescricao = l.descricao.toLowerCase().includes(termoBusca);
+            const passaDataInicio = !dataInicioFiltro || l.mes >= dataInicioFiltro;
+            const passaDataFim = !dataFimFiltro || l.mes <= dataFimFiltro;
+
+            if (passaDescricao && passaDataInicio && passaDataFim) {
                 if (l.tipo === 'entrada') totalEntradas += l.valor;
                 if (l.tipo === 'saida') totalSaidas += l.valor;
                 if (l.tipo === 'cofrinho') totalCofrinho += l.valor;
             }
         });
 
-        const sufixoTitulo = termoBusca ? ` (Filtrado)` : '';
+        const temFiltroAtivo = termoBusca || dataInicioFiltro || dataFimFiltro;
+        const sufixoTitulo = temFiltroAtivo ? ` (Filtrado)` : '';
         const saldoLivre = totalEntradas - totalSaidas - totalCofrinho;
         
         if (filtroAtual === 'todos') {
@@ -308,10 +329,12 @@
                 </div>
             `;
         } else {
+            const totalVisivel = dadosFiltrados.reduce((soma, item) => soma + item.valor, 0);
+
             const mapasCards = {
-                'entrada': { classe: 'bg-success-subtle text-success', titulo: 'Total de Entradas', valor: totalEntradas },
-                'saida': { classe: 'bg-danger-subtle text-danger', titulo: 'Total de Saídas', valor: totalSaidas },
-                'cofrinho': { classe: 'bg-info-subtle text-info-emphasis', titulo: 'Total Guardado no Cofrinho 💰', valor: totalCofrinho }
+                'entrada': { classe: 'bg-success-subtle text-success', titulo: 'Total de Entradas', valor: totalVisivel },
+                'saida': { classe: 'bg-danger-subtle text-danger', titulo: 'Total de Saídas', valor: totalVisivel },
+                'cofrinho': { classe: 'bg-info-subtle text-info-emphasis', titulo: 'Total Guardado no Cofrinho 💰', valor: totalVisivel }
             };
             const cardAtivo = mapasCards[filtroAtual];
             cardsResumo.innerHTML = `
@@ -357,7 +380,7 @@
         });
 
         if (dadosFiltrados.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">Nenhum lançamento encontrado.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">Nenhum lançamento encontrado para os filtros aplicados.</td></tr>`;
         }
     }
 
@@ -431,7 +454,6 @@
         renderizarGrafico();
     }
 
-    // Inicialização da tela
     atualizarTela();
 </script>
 
